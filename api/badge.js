@@ -18,10 +18,10 @@ export default async function handler(req, res) {
     return res.status(400).send("Missing data");
   }
 
-  const didResponse = await fetch(`https://plc.directory/did/${encodeURIComponent(handle)}`);
-  const didData = await didResponse.json();
-  const did = didData.didDocument?.id;
-  if (!did) return res.status(400).send("Invalid handle or DID not found.");
+const didResponse = await fetch(`https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(handle)}`);
+const did = (await didResponse.json()).did;
+if (!did) return res.status(400).send("Invalid handle or DID not found.");
+
 
   if (action === "claim") {
     await fetch('https://your-labeler-server/label', {
