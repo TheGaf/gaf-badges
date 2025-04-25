@@ -1,5 +1,3 @@
-# Write the full corrected badge.js file
-badge_js_fixed = """
 export default async function handler(req, res) {
   // Enable CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -48,10 +46,3 @@ export default async function handler(req, res) {
     return res.status(500).json({ message: "🚨 Server error. Please try again later." });
   }
 }
-"""
-
-file_path = "/mnt/data/badge.js"
-with open(file_path, "w") as f:
-    f.write(badge_js_fixed)
-
-file_path
