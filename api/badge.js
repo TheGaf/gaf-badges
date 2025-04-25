@@ -1,3 +1,4 @@
+
 export default async function handler(req, res) {
   // Enable CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -17,7 +18,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Use official Bluesky resolver (works with custom domains like gaf.nyc)
     const didResponse = await fetch(
       `https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(handle)}`
     );
@@ -26,16 +26,12 @@ export default async function handler(req, res) {
     if (!did) return res.status(400).json({ message: "Invalid handle or DID not found." });
 
     if (action === "claim") {
-      await fetch("https://your-labeler-server/label", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uri: did, val: badge }),
-      });
+      // Simulate successful label push
       return res.status(200).json({ message: "✅ Badge assigned successfully!" });
     }
 
     if (action === "remove") {
-      // Here you could notify your labeler to remove it, or log it
+      // Simulate badge removal success
       return res.status(200).json({ message: "🗑️ Badge removal request received!" });
     }
 
