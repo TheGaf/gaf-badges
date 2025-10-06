@@ -1,7 +1,7 @@
 /**
  * GAF Labeler Core — badge.js
  * Handles verification, label creation, and local badge logging
- * Works with server.js via Express route /gaf_Bluesky/api/badge
+ * Deployed with Express on Vercel
  * © The Gaf
  */
 
@@ -9,7 +9,7 @@ import fs from "fs";
 import path from "path";
 import fetch from "node-fetch";
 
-// GafComment: The Express server imports this as a function (req, res)
+// GafComment: Express imports this as a function (req, res)
 export default async function handler(req, res) {
   // === Basic CORS ===
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -24,75 +24,53 @@ export default async function handler(req, res) {
     return res.status(400).json({ message: "Missing data." });
   }
 
-  // === Environment credentials (with fallback for local testing) ===
-  const token = process.env.BLUESKY_TOKEN || "your-local-test-token";
-  const labelerDid =
-    process.env.LABELER_DID || "did:plc:7s64rkmtimbhralueam7rxnl";
-
+  // === Environment credentials (from Vercel) ===
+  const token = process.env.BLUESKY_TOKEN;
+  const labelerDid = process.env.LABELER_DID;
   if (!token || !labelerDid) {
-    return res
-      .status(500)
-      .json({ message: "Missing Bluesky credentials (env vars)." });
+    return res.status(500).json({ message: "Missing Bluesky credentials." });
   }
 
-  // === File path for local JSON mirror ===
-  const filePath = path.join(
-    path.dirname(new URL(import.meta.url).pathname),
-    "badges.json"
-  );
-
-  // === Ensure badges.json exists ===
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(JSON.stringify({ badges: [] }, null, 2), "utf8");
-  }
+  // === File path for local badges.json ===
+  const filePath = path.join(process.cwd(), "badges.json");
 
   try {
     // === Resolve DID from handle ===
     const didResponse = await fetch(
-      `https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(
-        handle
-      )}`
+      `https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(handle)}`
     );
     const didData = await didResponse.json();
     const did = didData.did;
-    if (!did)
-      return res
-        .status(400)
-        .json({ message: "Invalid handle or DID not found." });
-
-    console.log(
-      `[${new Date().toISOString()}] ${handle} → ${action} ${badge || ""}`
-    );
+    if (!did) {
+      return res.status(400).json({ message: "Invalid handle or DID not found." });
+    }
 
     // === Handle badge claiming ===
     if (action === "claim") {
-      const labelResponse = await fetch(
-        "https://bsky.social/xrpc/com.atproto.label.defs.create",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            labels: [
-              {
-                src: labelerDid,
-                uri: `at://${did}/app.bsky.actor.profile/self`,
-                val: badge,
-                cts: new Date().toISOString(),
-              },
-            ],
-          }),
-        }
-      );
+      const labelResponse = await fetch("https://bsky.social/xrpc/com.atproto.label.create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          labels: [
+            {
+              src: labelerDid,
+              uri: `at://${did}/app.bsky.actor.profile/self`,
+              val: badge,
+              cts: new Date().toISOString(),
+            },
+          ],
+        }),
+      });
 
       if (!labelResponse.ok) {
-        const err = await labelResponse.text();
-        throw new Error(`Label creation failed: ${err}`);
+        const errText = await labelResponse.text();
+        throw new Error(`Label creation failed: ${errText}`);
       }
 
-      // === Update local badges.json ===
+      // === Update badges.json ===
       const data = fs.existsSync(filePath)
         ? JSON.parse(fs.readFileSync(filePath, "utf8"))
         : { badges: [] };
@@ -112,9 +90,7 @@ export default async function handler(req, res) {
 
       fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
 
-      return res
-        .status(200)
-        .json({ message: `✅ ${badge} badge assigned successfully!` });
+      return res.status(200).json({ message: `✅ ${badge} badge assigned successfully!` });
     }
 
     // === Handle badge removal ===
@@ -127,16 +103,13 @@ export default async function handler(req, res) {
       }
 
       return res.status(200).json({
-        message:
-          "🗑️ Badge removed locally. (Bluesky label removal pending API support.)",
+        message: "🗑️ Badge removed locally. (Bluesky label removal pending API support.)",
       });
     }
 
     return res.status(400).json({ message: "Unknown action." });
   } catch (err) {
     console.error("Badge API error:", err);
-    return res
-      .status(500)
-      .json({ message: "🚨 Server error. Please try again later." });
+    return res.status(500).json({ message: "🚨 Server error. Please try again later." });
   }
 }
