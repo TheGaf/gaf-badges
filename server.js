@@ -61,8 +61,8 @@ app.get("/badges.json", (req, res) => {
 });
 
 // Your routes (keep the gaf_Bluesky prefix only here)
-app.post("/gaf_Bluesky/badge", handler);
-app.get("/gaf_Bluesky/health", (_req, res) =>
+app.post("/badge", handler);
+app.get("/health", (_req, res) =>
   res.json({ status: "ok", labeler: "GAF Labeler Active" })
 );
 
