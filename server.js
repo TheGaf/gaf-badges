@@ -1,7 +1,7 @@
 /**
  * GAF Labeler Express Server
- * Runs on HostPapa or any Node-capable host.
- * Exposes:  https://gaf.nyc/gaf_Bluesky/api/badge
+ * Deployed on Vercel
+ * Exposes: https://gaf-badges.vercel.app/gaf_Bluesky/badge
  */
 
 import express from "express";
@@ -14,17 +14,15 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(express.json());
-app.use(express.static(__dirname)); // serves badges.html, badges.json, etc.
+app.use(express.static(__dirname)); // serves badges.json, etc.
 
-// === API Route ===
-app.post("/gaf_Bluesky/api/badge", handler);
-
-// Optional: health check route
-app.get("/gaf_Bluesky/api/health", (req, res) => {
+// === API Routes ===
+app.post("/gaf_Bluesky/badge", handler);
+app.get("/gaf_Bluesky/health", (req, res) => {
   res.json({ status: "ok", labeler: "GAF Labeler Active" });
 });
 
-// === Start server ===
+// === Start Server ===
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ GAF Labeler running on http://localhost:${PORT}`);
