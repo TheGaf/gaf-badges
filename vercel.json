@@ -1,11 +1,3 @@
 {
-  "version": 2,
-  "builds": [
-    { "src": "api/**/*.js", "use": "@vercel/node" },
-    { "src": "badges.html", "use": "@vercel/static" }
-  ],
-  "routes": [
-    { "src": "/", "dest": "/badges.html" },
-    { "src": "/badges", "dest": "/badges.html" }
-  ]
+  "version": 2
 }
