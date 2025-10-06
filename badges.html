@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Claim Your GAF Bluesky Verfied Badge</title>
+  <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+  <link rel="stylesheet" href="https://gaf.nyc/gafstandard.css" />
+
+  <!-- Keep your badge-specific styling -->
+  <style>
+    body {
+      font-family: 'Titillium Web', sans-serif;
+      background-color: #121212;
+      color: #59DCFF;
+      text-align: left;
+      padding: 20px;
+      overflow-y: auto;
+      line-height: 1.5;
+      min-height: 100vh;
+      margin: 0;
+    }
+
+    .container {
+      max-width: 350px;
+      margin: auto;
+      padding: 20px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .logo {
+      width: 100%;
+      max-width: 180px;
+      height: auto;
+      display: block;
+      margin: 0 auto 30px auto;
+      animation: slowBlink 0.75s infinite alternate;
+    }
+
+    @keyframes slowBlink { 
+      0% { filter: brightness(1); } 
+      100% { filter: brightness(2); } 
+    }
+
+    h2, h3, h4 {
+      text-align: center;
+      color: #fff;
+    }
+
+    .section {
+      background: rgba(0, 0, 0, 0.75);
+      border-radius: 10px;
+      padding: 15px;
+      margin-bottom: 15px;
+      border: 1px solid rgba(89, 220, 255, 0.1);
+      opacity: 0;
+      transform: translateY(20px);
+      transition: all 0.8s ease-out;
+    }
+
+    .section:hover { 
+      background: rgba(0, 0, 0, 0.85); 
+      border-color: rgba(89, 220, 255, 0.2); 
+    }
+
+    .section.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    select, input[type='text'], input[type='submit'] {
+      width: 100%;
+      padding: 1vh;
+      font-size: 2vh;
+      font-family: 'Titillium Web', sans-serif;
+      font-weight: 700;
+      margin-bottom: 2vh;
+      box-sizing: border-box;
+    }
+
+    select {
+      background: #fff;
+      color: #000;
+      border-radius: 4px;
+    }
+
+    input[type='submit'] {
+      color: #000;
+      background-color: #00ff00;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all 0.3s ease;
+    }
+
+    input[type='submit']:hover {
+      animation: blink 0.5s infinite alternate;
+    }
+
+    @keyframes blink {
+      0% { background-color: #00ff00; color: #000; }
+      100% { background-color: #fff; color: #00ff00; }
+    }
+
+    .success {
+      margin-top: 1em;
+      color: #00ff00;
+      font-weight: bold;
+      text-align: center;
+      opacity: 1;
+      transition: opacity 1s ease-out;
+    }
+
+    .success.fade-out {
+      opacity: 0;
+    }
+
+    label {
+      font-size: 0.9em;
+      display: block;
+      margin-bottom: 1em;
+      color: #59DCFF;
+    }
+
+    #badgeList {
+      margin-top: 20px;
+      text-align: center;
+      color: #fff;
+      background: rgba(0,0,0,0.6);
+      padding: 10px;
+      border-radius: 8px;
+    }
+
+    #badgeList h4 { margin-top: 0; color: #59DCFF; }
+    #badgeList ul { list-style: none; padding: 0; font-size: 0.9em; }
+  </style>
+</head>
+
+<body>
+  <video autoplay loop muted playsinline id="bg-video" preload="auto">
+    <source src="https://gaf.nyc/shorten.mp4" type="video/mp4">
+    Your browser does not support the video tag.
+  </video>
+
+  <div class="container">
+    <img src="https://gaf.nyc/BGtitle.svg" alt="BG Logo" class="logo" />
+    <h2>Claim Your GAF Badge!</h2>
+
+    <div class="section">
+      <h4>🎖️ Pick Your Badge</h4>
+      <form id="claimForm">
+        <select id="badge" required>
+          <option value="">-- Choose your badge --</option>
+          <option value="gaf.pizza">🍕 NYC Pizza</option>
+          <option value="gaf.shielded">🛡 Gaf Knows Me!</option>
+          <option value="gaf.popmusic">🎶 All Pop</option>
+          <option value="gaf.watchme">👀 Someone to Watch!</option>
+          <option value="gaf.bde">🍆 BDE!</option>
+        </select>
+        <input type="text" id="handle" placeholder="yourhandle.bsky.social" required>
+        <label><input type="checkbox" id="confirm" required> I confirm this is my handle</label>
+        <input type="submit" value="GET YOUR BADGE">
+      </form>
+      <div class="success" id="successMessage"></div>
+    </div>
+
+    <div class="section">
+      <h4>🗑️ Remove My Badge</h4>
+      <form id="removeForm">
+        <input type="text" id="removeHandle" placeholder="yourhandle.bsky.social" required>
+        <label><input type="checkbox" id="removeConfirm" required> I confirm this is my handle</label>
+        <input type="submit" value="REMOVE BADGE">
+      </form>
+      <div class="success" id="removeSuccessMessage"></div>
+    </div>
+
+    <div id="badgeList" class="section">
+      <h4>🏅 Live Badge Wall</h4>
+      <ul id="badges"></ul>
+    </div>
+  </div>
+
+<script>
+const API_ENDPOINT = "https://gaf-badges.vercel.app/api/badge";
+const BADGE_JSON = "https://gaf-badges.vercel.app/api/badges";
+
+
+
+function showSuccessMessage(id, message) {
+  const el = document.getElementById(id);
+  el.innerText = message;
+  el.classList.remove('fade-out');
+  setTimeout(() => {
+    el.classList.add('fade-out');
+    setTimeout(() => {
+      el.innerText = "";
+      el.classList.remove('fade-out');
+    }, 1000);
+  }, 4000);
+}
+
+async function handleForm(formId, action) {
+  const form = document.getElementById(formId);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const handle = form.querySelector('input[type="text"]').value.trim();
+    const confirm = form.querySelector('input[type="checkbox"]').checked;
+    const badge = document.getElementById('badge')?.value;
+    if (!handle || !confirm || (action === "claim" && !badge))
+      return alert('Please fill out all fields and confirm.');
+
+    const res = await fetch(API_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, handle, badge })
+    });
+
+    const result = await res.json();
+    const msgId = action === "claim" ? 'successMessage' : 'removeSuccessMessage';
+    showSuccessMessage(msgId, res.ok ? result.message : "⚠️ Error. Try again later.");
+    loadBadges();
+  });
+}
+
+async function loadBadges() {
+  try {
+    const res = await fetch(BADGE_JSON + '?t=' + Date.now());
+    const data = await res.json();
+    const list = document.getElementById("badges");
+    list.innerHTML = "";
+    if (data.badges.length === 0) {
+      list.innerHTML = "<li>No badges claimed yet!</li>";
+      return;
+    }
+    data.badges.forEach(b => {
+      const li = document.createElement("li");
+      li.textContent = `${b.handle} → ${b.badge}`;
+      list.appendChild(li);
+    });
+  } catch {
+    document.getElementById("badges").innerHTML = "<li>Could not load badges.json</li>";
+  }
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+  handleForm("claimForm", "claim");
+  handleForm("removeForm", "remove");
+  loadBadges();
+
+  document.querySelectorAll('.section').forEach(section => {
+    new IntersectionObserver(entries => {
+      entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('visible'); });
+    }, { threshold: 0.2 }).observe(section);
+  });
+});
+</script>
+</body>
+</html>
