@@ -7,17 +7,9 @@
 
 import fs from "fs";
 import path from "path";
-import fetch from "node-fetch";
 
-// GafComment: Express imports this function in server.js
 export default async function handler(req, res) {
-  console.log("🛰️ Incoming badge request:", {
-    action: req.body.action,
-    handle: req.body.handle,
-    hasToken: !!process.env.BLUESKY_TOKEN,
-    hasDid: !!process.env.LABELER_DID,
-    env: process.env.VERCEL ? "Vercel" : "Local"
-  });
+  console.log("🛰️ Incoming badge request:", req.body);
 
   // === Basic CORS ===
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -32,52 +24,37 @@ export default async function handler(req, res) {
     return res.status(400).json({ message: "Missing data." });
   }
 
-  // === Environment credentials (from Vercel dashboard) ===
   const token = process.env.BLUESKY_TOKEN;
   const labelerDid = process.env.LABELER_DID;
   if (!token || !labelerDid) {
-    console.error("❌ Missing Bluesky credentials. Check Vercel env vars.");
+    console.error("❌ Missing Bluesky credentials.");
     return res.status(500).json({ message: "Missing Bluesky credentials." });
   }
 
-  // === File path for badges.json (Vercel only allows /tmp for writes) ===
-  const isVercel = process.env.VERCEL === "1";
-  const filePath = isVercel
-    ? path.join("/tmp", "badges.json")
-    : path.join(process.cwd(), "badges.json");
+  const filePath = path.join("/tmp", "badges.json");
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, JSON.stringify({ badges: [] }, null, 2));
+  }
 
   try {
-    // Ensure file exists
-    if (!fs.existsSync(filePath)) {
-      fs.writeFileSync(filePath, JSON.stringify({ badges: [] }, null, 2), "utf8");
-    }
-
-    // === Resolve DID from Bluesky handle ===
-    const didResponse = await fetch(
+    // === Resolve DID ===
+    const didRes = await fetch(
       `https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(handle)}`
     );
-    const didData = await didResponse.json();
+    const didData = await didRes.json();
     const did = didData?.did;
     if (!did) {
-      console.warn("⚠️ DID not found for handle:", handle, didData);
+      console.warn("⚠️ DID not found for handle:", handle);
       return res.status(400).json({ message: "Invalid handle or DID not found." });
     }
 
-    // Load current data
-    let data;
-    try {
-      data = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    } catch {
-      data = { badges: [] };
-    }
-
-    // === Handle badge claiming ===
+    // === Claim badge ===
     if (action === "claim") {
-      const labelResponse = await fetch("https://bsky.social/xrpc/com.atproto.label.create", {
+      const labelRes = await fetch("https://bsky.social/xrpc/com.atproto.label.create", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-        Authorization: token,
+          Authorization: token, // already includes "Bearer"
         },
         body: JSON.stringify({
           labels: [
@@ -91,45 +68,34 @@ export default async function handler(req, res) {
         }),
       });
 
-      if (!labelResponse.ok) {
-        const errText = await labelResponse.text();
-        console.error("Label creation failed:", errText);
-        return res.status(500).json({ message: "Label creation failed." });
+      const labelText = await labelRes.text();
+      if (!labelRes.ok) {
+        console.error("❌ Label creation failed:", labelText);
+        return res.status(500).json({ message: labelText });
       }
 
-      // Update local list
+      let data = JSON.parse(fs.readFileSync(filePath, "utf8"));
       const existing = data.badges.find((b) => b.handle === handle);
-      if (existing) {
-        existing.badge = badge;
-        existing.timestamp = new Date().toISOString();
-      } else {
-        data.badges.push({ handle, did, badge, timestamp: new Date().toISOString() });
-      }
+      if (existing) existing.badge = badge;
+      else data.badges.push({ handle, did, badge, timestamp: new Date().toISOString() });
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 
-      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
       return res.status(200).json({ message: `✅ ${badge} badge assigned successfully!` });
     }
 
-    // === Handle badge removal ===
+    // === Remove badge ===
     if (action === "remove") {
+      let data = JSON.parse(fs.readFileSync(filePath, "utf8"));
       data.badges = data.badges.filter((b) => b.handle !== handle);
-      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
-      return res.status(200).json({
-        message: "🗑️ Badge removed locally. (Bluesky label removal pending API support.)",
-      });
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+      return res.status(200).json({ message: "🗑️ Badge removed locally." });
     }
 
-    // Unknown action
+    // === Unknown action ===
     return res.status(400).json({ message: "Unknown action." });
 
-} catch (err) {
-  console.error("🚨 Badge API error:", err.message, err.stack);
-  return res.status(500).json({ 
-    message: "🚨 Server error. Check Vercel logs for details.",
-    debug: {
-      message: err.message,
-      step: err.stack?.split("\n")[1]?.trim() || "unknown"
-    }
-  });
-
+  } catch (err) {
+    console.error("🚨 Server crash:", err);
+    return res.status(500).json({ message: err.message });
+  }
 }
