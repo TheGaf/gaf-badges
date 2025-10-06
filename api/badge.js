@@ -1,44 +1,44 @@
-
 /**
- * GAF Labeler Core — badge.js
- * Handles verification, label creation, and local badge logging
- * Deployed with Express on Vercel
+ * GAF Labeler — /api/badge
+ * Creates or removes Bluesky labels (badges)
  * © The Gaf
  */
 
 import fs from "fs";
 import path from "path";
+import fetch from "node-fetch";
 
 export default async function handler(req, res) {
-  console.log("🛰️ Incoming badge request:", req.body);
+  console.log("🛰️ Incoming request:", req.method, req.body);
 
-  // === Basic CORS ===
+  // === CORS ===
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).send("Only POST allowed");
+  if (req.method !== "POST") return res.status(405).json({ message: "Only POST allowed" });
 
   const { action, handle, badge } = req.body || {};
   if (!handle || (action === "claim" && !badge)) {
     return res.status(400).json({ message: "Missing data." });
   }
 
+  // === Credentials ===
   const token = process.env.BLUESKY_TOKEN;
   const labelerDid = process.env.LABELER_DID;
   if (!token || !labelerDid) {
-    console.error("❌ Missing Bluesky credentials.");
+    console.error("❌ Missing Bluesky credentials in environment variables");
     return res.status(500).json({ message: "Missing Bluesky credentials." });
   }
 
+  // === File path setup (Vercel allows only /tmp for writes) ===
   const filePath = path.join("/tmp", "badges.json");
   if (!fs.existsSync(filePath)) {
     fs.writeFileSync(filePath, JSON.stringify({ badges: [] }, null, 2));
   }
 
   try {
-    // === Resolve DID ===
+    // === Resolve DID from handle ===
     const didRes = await fetch(
       `https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(handle)}`
     );
@@ -55,7 +55,7 @@ export default async function handler(req, res) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: token, // already includes "Bearer"
+          Authorization: token, // token already includes "Bearer"
         },
         body: JSON.stringify({
           labels: [
@@ -72,9 +72,10 @@ export default async function handler(req, res) {
       const labelText = await labelRes.text();
       if (!labelRes.ok) {
         console.error("❌ Label creation failed:", labelText);
-        return res.status(500).json({ message: labelText });
+        return res.status(500).json({ message: "Label creation failed.", details: labelText });
       }
 
+      // Update local list
       let data = JSON.parse(fs.readFileSync(filePath, "utf8"));
       const existing = data.badges.find((b) => b.handle === handle);
       if (existing) existing.badge = badge;
@@ -92,11 +93,10 @@ export default async function handler(req, res) {
       return res.status(200).json({ message: "🗑️ Badge removed locally." });
     }
 
-    // === Unknown action ===
     return res.status(400).json({ message: "Unknown action." });
 
   } catch (err) {
     console.error("🚨 Server crash:", err);
-    return res.status(500).json({ message: err.message });
+    return res.status(500).json({ message: err.message || "Internal error" });
   }
 }
