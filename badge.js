@@ -115,8 +115,10 @@ export default async function handler(req, res) {
     }
 
     return res.status(400).json({ message: "Unknown action." });
-  } catch (err) {
-    console.error("Badge API error:", err);
-    return res.status(500).json({ message: "🚨 Server error. Please try again later." });
-  }
+} catch (err) {
+  console.error("🚨 Badge API error:", err.message, err.stack);
+  return res.status(500).json({ 
+    message: "🚨 Server error. Check logs on Vercel for details.",
+    error: err.message
+  });
 }
