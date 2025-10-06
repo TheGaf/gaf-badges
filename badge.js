@@ -9,7 +9,7 @@ import fs from "fs";
 import path from "path";
 import fetch from "node-fetch";
 
-// GafComment: Express imports this as a function (req, res)
+// GafComment: Express imports this function in server.js
 export default async function handler(req, res) {
   // === Basic CORS ===
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -19,20 +19,20 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).send("Only POST allowed");
 
-  const { action, handle, badge } = req.body;
+  const { action, handle, badge } = req.body || {};
   if (!handle || (action === "claim" && !badge)) {
     return res.status(400).json({ message: "Missing data." });
   }
 
-  // === Environment credentials (from Vercel) ===
+  // === Environment credentials (from Vercel dashboard) ===
   const token = process.env.BLUESKY_TOKEN;
   const labelerDid = process.env.LABELER_DID;
   if (!token || !labelerDid) {
+    console.error("❌ Missing Bluesky credentials. Check Vercel env vars.");
     return res.status(500).json({ message: "Missing Bluesky credentials." });
   }
 
-  // === File path for badges.json ===
-  // GafComment: On Vercel, only /tmp is writable. Use it for runtime persistence.
+  // === File path for badges.json (Vercel only allows /tmp for writes) ===
   const isVercel = process.env.VERCEL === "1";
   const filePath = isVercel
     ? path.join("/tmp", "badges.json")
@@ -44,20 +44,24 @@ export default async function handler(req, res) {
       fs.writeFileSync(filePath, JSON.stringify({ badges: [] }, null, 2), "utf8");
     }
 
-    // === Resolve DID from handle ===
+    // === Resolve DID from Bluesky handle ===
     const didResponse = await fetch(
       `https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(handle)}`
     );
     const didData = await didResponse.json();
-    const did = didData.did;
+    const did = didData?.did;
     if (!did) {
+      console.warn("⚠️ DID not found for handle:", handle, didData);
       return res.status(400).json({ message: "Invalid handle or DID not found." });
     }
 
-    // === Read existing badges.json ===
-    const data = fs.existsSync(filePath)
-      ? JSON.parse(fs.readFileSync(filePath, "utf8"))
-      : { badges: [] };
+    // Load current data
+    let data;
+    try {
+      data = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    } catch {
+      data = { badges: [] };
+    }
 
     // === Handle badge claiming ===
     if (action === "claim") {
@@ -85,22 +89,16 @@ export default async function handler(req, res) {
         return res.status(500).json({ message: "Label creation failed." });
       }
 
-      // Update badges.json
+      // Update local list
       const existing = data.badges.find((b) => b.handle === handle);
       if (existing) {
         existing.badge = badge;
         existing.timestamp = new Date().toISOString();
       } else {
-        data.badges.push({
-          handle,
-          did,
-          badge,
-          timestamp: new Date().toISOString(),
-        });
+        data.badges.push({ handle, did, badge, timestamp: new Date().toISOString() });
       }
 
       fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
-
       return res.status(200).json({ message: `✅ ${badge} badge assigned successfully!` });
     }
 
@@ -108,17 +106,19 @@ export default async function handler(req, res) {
     if (action === "remove") {
       data.badges = data.badges.filter((b) => b.handle !== handle);
       fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
-
       return res.status(200).json({
         message: "🗑️ Badge removed locally. (Bluesky label removal pending API support.)",
       });
     }
 
+    // Unknown action
     return res.status(400).json({ message: "Unknown action." });
-} catch (err) {
-  console.error("🚨 Badge API error:", err.message, err.stack);
-  return res.status(500).json({ 
-    message: "🚨 Server error. Check logs on Vercel for details.",
-    error: err.message
-  });
+
+  } catch (err) {
+    console.error("🚨 Badge API error:", err.message, err.stack);
+    return res.status(500).json({
+      message: "🚨 Server error. Check Vercel logs for details.",
+      error: err.message,
+    });
+  }
 }
