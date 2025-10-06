@@ -11,6 +11,14 @@ import fetch from "node-fetch";
 
 // GafComment: Express imports this function in server.js
 export default async function handler(req, res) {
+  console.log("🛰️ Incoming badge request:", {
+    action: req.body.action,
+    handle: req.body.handle,
+    hasToken: !!process.env.BLUESKY_TOKEN,
+    hasDid: !!process.env.LABELER_DID,
+    env: process.env.VERCEL ? "Vercel" : "Local"
+  });
+
   // === Basic CORS ===
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -114,11 +122,14 @@ export default async function handler(req, res) {
     // Unknown action
     return res.status(400).json({ message: "Unknown action." });
 
-  } catch (err) {
-    console.error("🚨 Badge API error:", err.message, err.stack);
-    return res.status(500).json({
-      message: "🚨 Server error. Check Vercel logs for details.",
-      error: err.message,
-    });
-  }
+} catch (err) {
+  console.error("🚨 Badge API error:", err.message, err.stack);
+  return res.status(500).json({ 
+    message: "🚨 Server error. Check Vercel logs for details.",
+    debug: {
+      message: err.message,
+      step: err.stack?.split("\n")[1]?.trim() || "unknown"
+    }
+  });
+
 }
