@@ -31,10 +31,19 @@ export default async function handler(req, res) {
     return res.status(500).json({ message: "Missing Bluesky credentials." });
   }
 
-  // === File path for local badges.json ===
-  const filePath = path.join(process.cwd(), "badges.json");
+  // === File path for badges.json ===
+  // GafComment: On Vercel, only /tmp is writable. Use it for runtime persistence.
+  const isVercel = process.env.VERCEL === "1";
+  const filePath = isVercel
+    ? path.join("/tmp", "badges.json")
+    : path.join(process.cwd(), "badges.json");
 
   try {
+    // Ensure file exists
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, JSON.stringify({ badges: [] }, null, 2), "utf8");
+    }
+
     // === Resolve DID from handle ===
     const didResponse = await fetch(
       `https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(handle)}`
@@ -44,6 +53,11 @@ export default async function handler(req, res) {
     if (!did) {
       return res.status(400).json({ message: "Invalid handle or DID not found." });
     }
+
+    // === Read existing badges.json ===
+    const data = fs.existsSync(filePath)
+      ? JSON.parse(fs.readFileSync(filePath, "utf8"))
+      : { badges: [] };
 
     // === Handle badge claiming ===
     if (action === "claim") {
@@ -67,14 +81,11 @@ export default async function handler(req, res) {
 
       if (!labelResponse.ok) {
         const errText = await labelResponse.text();
-        throw new Error(`Label creation failed: ${errText}`);
+        console.error("Label creation failed:", errText);
+        return res.status(500).json({ message: "Label creation failed." });
       }
 
-      // === Update badges.json ===
-      const data = fs.existsSync(filePath)
-        ? JSON.parse(fs.readFileSync(filePath, "utf8"))
-        : { badges: [] };
-
+      // Update badges.json
       const existing = data.badges.find((b) => b.handle === handle);
       if (existing) {
         existing.badge = badge;
@@ -95,12 +106,8 @@ export default async function handler(req, res) {
 
     // === Handle badge removal ===
     if (action === "remove") {
-      let data = { badges: [] };
-      if (fs.existsSync(filePath)) {
-        data = JSON.parse(fs.readFileSync(filePath, "utf8"));
-        data.badges = data.badges.filter((b) => b.handle !== handle);
-        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
-      }
+      data.badges = data.badges.filter((b) => b.handle !== handle);
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
 
       return res.status(200).json({
         message: "🗑️ Badge removed locally. (Bluesky label removal pending API support.)",
