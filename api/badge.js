@@ -55,8 +55,8 @@ export default async function handler(req, res) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: token, // token already includes "Bearer"
-        },
+          Authorization: `Bearer ${token}`,
+    },
         body: JSON.stringify({
           labels: [
             {
